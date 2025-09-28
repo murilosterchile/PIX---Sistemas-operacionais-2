@@ -39,3 +39,7 @@
 
 # debug information files
 *.dwo
+
+# Ignore compiled C++ executables
+cliente
+servidor
