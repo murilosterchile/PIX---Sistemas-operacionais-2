@@ -1,8 +1,3 @@
-# PIX---Sistemas-operacionais-2
-
-é o urubu do pix não tem jeito pai.é os GGGGGGGGGGGGG
-
-
 # Divisão de Tarefas - Trabalho Prático INF01151
 
 Este documento detalha a separação das implementações necessárias para o trabalho prático, com o objetivo de facilitar a divisão de tarefas em um grupo e minimizar a sobreposição de trabalho.
