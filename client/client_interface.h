@@ -19,11 +19,11 @@ public:
 	void stop();
 
 private:
-	std::atomoc<bool> running;
+	std::atomic<bool> running;
 	std::thread input_thread;
 	std::thread output_thread;
 
-	ClientProcessor processor;
+	ClientProcessor& processor;
 
 	void input_loop();
 	void output_loop();

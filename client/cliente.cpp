@@ -1,6 +1,8 @@
 #include <iostream>
 #include <memory>
 #include "client_discovery.h"
+#include "client_interface.h"
+#include "client_processor.h"
 #include "../common/utils.h"
 
 int main(int argc, char* argv[]) {
@@ -16,25 +18,19 @@ int main(int argc, char* argv[]) {
     }
     
     try {
-        std::cout << "=== CLIENTE PIX - Etapa 5 Debug ===" << std::endl;
-        std::cout << "Porta: " << port << std::endl;
-        std::cout << "Timestamp: " << getCurrentTimestamp() << std::endl;
-        std::cout << "====================================" << std::endl;
-        
         // Descobrir servidor
         ClientDiscovery discovery(port);
         std::string server_ip = discovery.discoverServer();
         
-        std::cout << getCurrentTimestamp() 
-                  << " server addr " << server_ip << std::endl;
-        
-        std::cout << "✅ Descoberta concluída com sucesso!" << std::endl;
-        std::cout << "Servidor encontrado: " << server_ip << std::endl;
-        std::cout << "Pressione Enter para encerrar..." << std::endl;
-        std::cin.get();
-        
+        std::cout << getCurrentTimestamp() << " server_addr " << server_ip << std::endl;
+
+        ClientProcessor processor(server_ip, port);
+        ClientInterface interface(processor);
+
+        interface.start();
+        interface.stop();
     } catch (const std::exception& e) {
-        std::cerr << "❌ Erro: " << e.what() << std::endl;
+        std::cerr << "Erro: " << e.what() << std::endl;
         return 1;
     }
     

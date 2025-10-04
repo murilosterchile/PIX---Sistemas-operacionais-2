@@ -19,7 +19,7 @@ CLIENT_TARGET = cliente
 
 # Arquivos fonte comuns
 COMMON_SOURCES = $(COMMON_DIR)/utils.cpp
-COMMON_HEADERS = $(COMMON_DIR)/protocol.h $(COMMON_DIR)/utils.h $(COMMON_DIR)/server_data.h
+COMMON_HEADERS = $(COMMON_DIR)/protocol.h $(COMMON_DIR)/utils.h $(COMMON_DIR)/server_data.h $(COMMON_DIR)/debug.h
 
 # Arquivos fonte do servidor
 SERVER_SOURCES = $(SERVER_DIR)/servidor.cpp \
@@ -33,9 +33,11 @@ SERVER_HEADERS = $(SERVER_DIR)/discovery.h \
 # Arquivos fonte do cliente
 CLIENT_SOURCES = $(CLIENT_DIR)/cliente.cpp \
                  $(CLIENT_DIR)/client_discovery.cpp \
-                 $(CLIENT_DIR)/client_processor.cpp
+                 $(CLIENT_DIR)/client_processor.cpp \
+                 $(CLIENT_DIR)/client_interface.cpp
 CLIENT_HEADERS = $(CLIENT_DIR)/client_discovery.h \
-                 $(CLIENT_DIR)/client_processor.h
+                 $(CLIENT_DIR)/client_processor.h \
+		 $(CLIENT_DIR)/client_interface.h 
 
 # Objetos
 COMMON_OBJECTS = $(COMMON_SOURCES:$(COMMON_DIR)/%.cpp=$(OBJ_DIR)/common_%.o)

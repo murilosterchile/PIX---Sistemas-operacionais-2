@@ -1,4 +1,4 @@
-#include "client_interface.hpp"
+#include "client_interface.h"
 #include "../common/debug.h"
 #include "../common/utils.h"
 #include <sstream>
@@ -19,9 +19,9 @@ void ClientInterface::start(){
 
 void ClientInterface::stop(){
     if (!running) return;
-    running = false;
     if (input_thread.joinable()) input_thread.join();
     if (output_thread.joinable()) output_thread.join();
+    running = false;
 }
 
 void ClientInterface::input_loop(){
@@ -32,7 +32,7 @@ void ClientInterface::input_loop(){
             break;
         }
 
-        std::stringstream ss;
+        std::stringstream ss(input);
         std::string ip;
         int value;
 
@@ -42,7 +42,7 @@ void ClientInterface::input_loop(){
                 //processor.request(ip, value);
             }
             else{
-                std::cerr << "Error: " << ip << " is not a valid ip adress" << std:endl;
+                std::cerr << "Error: " << ip << " is not a valid ip adress" << std::endl;
             }
         }
         else{
@@ -51,4 +51,6 @@ void ClientInterface::input_loop(){
     }
 }
 
-void ClientInterface::output_loop();
+void ClientInterface::output_loop(){
+//e.g.: 2024-10-01 18:37:01 server 10.1.1.20 id req 1 dest 10.1.1.3 value 10 new balance 90
+};
