@@ -4,6 +4,7 @@
 #include "client_interface.h"
 #include "client_processor.h"
 #include "../common/utils.h"
+#include  "../common/debug.h"
 
 int main(int argc, char* argv[]) {
     if (argc != 2) {

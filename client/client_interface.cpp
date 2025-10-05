@@ -1,6 +1,7 @@
 #include "client_interface.h"
 #include "../common/debug.h"
 #include "../common/utils.h"
+#include "client_processor.h"
 #include <sstream>
 #include <string>
 
@@ -39,7 +40,7 @@ void ClientInterface::input_loop(){
         if(ss >> ip >> value){
             if(isValidIpAddress(ip)){
                 D_PRINT(ip << " " << value);
-                //processor.request(ip, value);
+                processor.request(ip, value);
             }
             else{
                 std::cerr << "Error: " << ip << " is not a valid ip adress" << std::endl;
@@ -53,4 +54,17 @@ void ClientInterface::input_loop(){
 
 void ClientInterface::output_loop(){
 //e.g.: 2024-10-01 18:37:01 server 10.1.1.20 id req 1 dest 10.1.1.3 value 10 new balance 90
+    response_data_t  response;
+    while(running){
+    //check response queue and print to terminal every time a new response is added
+        response = processor.getResponse();
+        if(response.approved){
+            D_PRINT("response for approved transaction");
+            std::cout << getCurrentTimestamp() << " server " << response.server_ip << " id req " << response.id_req << " dest " << response.dest_ip << " value " << response.value << " new balance " << response.new_balance << std::endl;
+        } else {
+            D_PRINT("response for denied transaction");
+            std::cout << getCurrentTimestamp() << " request denied: server " << response.server_ip << " id req " << response.id_req << " dest " << response.dest_ip << " value " << response.value << " balance " << response.new_balance << std::endl;
+        }
+
+    }
 };

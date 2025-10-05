@@ -7,6 +7,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <string>
+#include "client_processor.h"
 
 class ClientProcessor;
 
