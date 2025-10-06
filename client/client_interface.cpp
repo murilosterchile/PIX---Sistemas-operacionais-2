@@ -28,6 +28,7 @@ void ClientInterface::stop(){
 void ClientInterface::input_loop(){
     std::string input;
     while(running){
+        //checka se CTRL+D
         if(!std::getline(std::cin, input)){
             running = false;
             break;
@@ -37,7 +38,9 @@ void ClientInterface::input_loop(){
         std::string ip;
         int value;
 
+        //checka se a linha enviada esta no formato IP VALUE
         if(ss >> ip >> value){
+            //checka se o formato do IP esta correto
             if(isValidIpAddress(ip)){
                 D_PRINT(ip << " " << value);
                 processor.request(ip, value);

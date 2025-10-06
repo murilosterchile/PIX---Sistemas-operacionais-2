@@ -28,7 +28,9 @@ int main(int argc, char* argv[]) {
         ClientProcessor processor(server_ip, port);
         ClientInterface interface(processor);
 
+        //roda a interface (thread de input e de output) que vai se comunicar com o modulo de processamento que manda requisicoes para o servidor
         interface.start();
+        //depois que a o usuario encerra o processo da interface ela da join nas duas threads e corrige a variavel running para false
         interface.stop();
     } catch (const std::exception& e) {
         std::cerr << "Erro: " << e.what() << std::endl;
