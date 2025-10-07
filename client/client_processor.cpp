@@ -81,6 +81,7 @@ void ClientProcessor::request(const std::string& ip, int value) {
                         cv.notify_one();
 
                         answered = true;
+                        ++current_id;
                     } else {
                         std::cout << "Old ID received" << std::endl;
                     }
