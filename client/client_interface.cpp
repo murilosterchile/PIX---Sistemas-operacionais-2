@@ -61,7 +61,7 @@ void ClientInterface::output_loop(){
     while(running){
     //check response queue and print to terminal every time a new response is added
         response = processor.getResponse();
-        if(response.approved){
+        if(response.success){
             D_PRINT("response for approved transaction");
             std::cout << getCurrentTimestamp() << " server " << response.server_ip << " id req " << response.id_req << " dest " << response.dest_ip << " value " << response.value << " new balance " << response.new_balance << std::endl;
         } else {

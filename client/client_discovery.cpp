@@ -1,5 +1,6 @@
 #include "client_discovery.h"
 #include "../common/utils.h"
+#include "../common/debug.h"
 #include <iostream>
 #include <cstring>
 #include <unistd.h>
@@ -107,22 +108,20 @@ bool ClientDiscovery::waitForResponse(std::string& server_ip) {
     sockaddr_in server_addr;
     socklen_t server_len = sizeof(server_addr);
     
-    std::cout << "Aguardando resposta..." << std::endl;
+    D_PRINT("Aguardando resposta...");
     
-    ssize_t recv_len = recvfrom(socket_fd, buffer, sizeof(buffer), 0,
-                               (struct sockaddr*)&server_addr, &server_len);
+    ssize_t recv_len = recvfrom(socket_fd, buffer, sizeof(buffer), 0, (struct sockaddr*)&server_addr, &server_len);
     
     if (recv_len > 0) {
-        std::cout << "Recebida resposta de " << ipToString(server_addr.sin_addr.s_addr)
-                  << " (tamanho: " << recv_len << ")" << std::endl;
+        D_PRINT("Recebida resposta de " << ipToString(server_addr.sin_addr.s_addr) << " (tamanho: " << recv_len << ")" );
                   
         if (recv_len == PACKET_SIZE) {
             packet_t response;
             memcpy(&response, buffer, sizeof(response));
             packet_net_to_host(&response);
             
-            std::cout << "Tipo de resposta: " << response.type << std::endl;
-            std::cout << "Esperado: " << static_cast<uint16_t>(DESCOBERTA_ACK) << std::endl;
+            D_PRINT("Tipo de resposta: " << response.type);
+            D_PRINT("Esperado: " << static_cast<uint16_t>(DESCOBERTA_ACK));
             
             if (static_cast<PacketType>(response.type) == DESCOBERTA_ACK) {
                 if (response.payload.disc_ack.accepted == 1) {

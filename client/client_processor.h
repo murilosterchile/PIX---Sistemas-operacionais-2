@@ -9,7 +9,7 @@
 #include <optional>
 
 typedef struct response_data{
-    bool approved;
+    bool success;
     std::string server_ip;
     int id_req;
     std::string dest_ip;
@@ -26,6 +26,8 @@ public:
 private:
     std::string server_ip;
     uint16_t server_port;
+    int sockfd;
+    int current_id;
     std::queue<response_data_t> response_queue;
     std::mutex queue_mutex;
     std::condition_variable cv;
