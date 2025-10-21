@@ -93,9 +93,17 @@ void DiscoveryService::handleDiscoveryRequest(const sockaddr_in& client_addr) {
         std::cout << getCurrentTimestamp() 
                   << " new client " << ipToString(client_ip)
                   << " balance 100" << std::endl;
+        
+        // Marcar que houve atualização
+        server_data->has_update = true;
     }
     
     lock.unlock();
+    
+    // Notificar interface apos liberar o lock
+    if (server_data->has_update) {
+        server_data->data_updated.notify_all();
+    }
 
     sendDiscoveryResponse(client_addr);
 }
