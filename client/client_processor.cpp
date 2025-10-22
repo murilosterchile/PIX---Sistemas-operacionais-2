@@ -8,9 +8,6 @@
 #include <sys/types.h>
 #include <thread>
 #include <chrono>
-#include "../common/protocol.h"
-#include "../common/utils.h"
-#include "../common/debug.h"
 
 
 ClientProcessor::ClientProcessor(const std::string& server_ip, uint16_t server_port)

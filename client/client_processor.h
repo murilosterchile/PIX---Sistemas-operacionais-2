@@ -7,6 +7,9 @@
 #include <queue>
 #include <mutex>
 #include <optional>
+#include "../common/protocol.h"
+#include "../common/utils.h"
+#include "../common/debug.h"
 
 typedef struct response_data{
     bool success;
