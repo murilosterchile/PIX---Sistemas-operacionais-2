@@ -35,9 +35,20 @@ void ClientProcessor::request(const std::string& ip, int value) {
     bool answered = false;
     while(!answered){
         //make request and save response message
-        char req_packet[PACKET_SIZE];
+        //set server addr
         sockaddr_in server_addr;
         socklen_t server_len = sizeof(server_addr);
+        memset(&server_addr, 0, sizeof(server_addr));
+        server_addr.sin_family = AF_INET;
+        server_addr.sin_port = htons(server_port+1);
+        inet_pton(AF_INET, server_ip.c_str(), &server_addr.sin_addr);
+
+        packet_t req_packet;
+        init_packet(&req_packet, REQUISICAO, current_id);
+        inet_pton(AF_INET, ip.c_str(), &req_packet.payload.req.dest_addr);
+        req_packet.payload.req.value = value;
+        packet_host_to_net(&req_packet);
+
         sendto(sockfd, &req_packet, sizeof(req_packet), 0, (struct sockaddr*)&server_addr, sizeof(server_addr));
 
         //try to receive response for DEFAULT_TIMEOUT_MS amount of time
