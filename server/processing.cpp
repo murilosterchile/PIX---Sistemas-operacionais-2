@@ -67,6 +67,7 @@ void ProcessingService::handleRequestThread(packet_t packet, sockaddr_in client_
     // cliente existe?
     auto client_it = server_data->clients.find(client_ip);
     if (client_it == server_data->clients.end()) {
+        // pacote inválido, cliente não cadastrado
         sendAck(client_addr, packet.seqn, 0, false);
         return;
     }
@@ -79,14 +80,31 @@ void ProcessingService::handleRequestThread(packet_t packet, sockaddr_in client_
         return;
     }
 
-    // verifica ordem 
+    // verifica ordem
     if (packet.seqn != client.last_req + 1) {
+        // mesmo sendo inválido, atualizamos last_req para evitar loop
+        client.last_req = packet.seqn;
         sendAck(client_addr, client.last_req, client.balance, false);
+        return;
+    }
+
+    // evita enviar dinheiro para si mesmo
+    if (packet.payload.req.dest_addr == client_ip) {
+        client.last_req = packet.seqn; // atualiza
+        sendAck(client_addr, packet.seqn, client.balance, false);
+        return;
+    }
+    
+    // evita enviar zero
+    if (packet.payload.req.value == 0) {
+        client.last_req = packet.seqn; // atualiza
+        sendAck(client_addr, packet.seqn, client.balance, false);
         return;
     }
 
     // verifica saldo  
     if (client.balance < packet.payload.req.value) {
+        client.last_req = packet.seqn; // atualiza
         sendAck(client_addr, packet.seqn, client.balance, false);
         return;
     }
@@ -94,15 +112,17 @@ void ProcessingService::handleRequestThread(packet_t packet, sockaddr_in client_
     // verifica se cliente destino existe
     auto dest_it = server_data->clients.find(packet.payload.req.dest_addr);
     if (dest_it == server_data->clients.end()) {
+        client.last_req = packet.seqn; // atualiza
         sendAck(client_addr, packet.seqn, client.balance, false);
         return;
     }
-   
-    ClientInfo& dest_client = dest_it->second;
 
+    // processa a transação
+    ClientInfo& dest_client = dest_it->second;
     client.balance -= packet.payload.req.value;
     dest_client.balance += packet.payload.req.value;
     client.last_req = packet.seqn;
+
     server_data->num_transactions++;
     server_data->total_transferred += packet.payload.req.value;
 
@@ -111,6 +131,7 @@ void ProcessingService::handleRequestThread(packet_t packet, sockaddr_in client_
     server_data->has_update = true;
     server_data->data_updated.notify_all();
 
+    // envia ACK de sucesso
     sendAck(client_addr, packet.seqn, client.balance, true);
 }
 
