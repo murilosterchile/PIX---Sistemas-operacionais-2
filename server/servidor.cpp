@@ -29,8 +29,8 @@ void signalHandler(int) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc != 2) {
-        std::cerr << "Uso: " << argv << " <porta>" << std::endl;
+    if (argc < 3) {
+        std::cerr << "Uso: Uso: " << argv << " <porta> <porta> <server_id> [replica1_ip:port ...]" << std::endl;
         return 1;
     }
     
