@@ -61,19 +61,22 @@ void ReplicationService::propagateState() {
 }
 
 void ReplicationService::sendStateToBackup(const PeerInfo& peer) {
-    std::shared_lock<std::shared_mutex> lock(server_data->rw_mutex);
+    // esse lock tava dando erro
+    // std::shared_lock<std::shared_mutex> lock(server_data->rw_mutex);
     
     // faz o pacote de update
     packet_t update_packet;
     init_packet(&update_packet, STATE_UPDATE, 0);
     
     // preenche dados
+    // Acesso seguro pois handleRequestThread mantém o lock de escrita
     update_packet.payload.state.num_transactions = server_data->num_transactions;
     update_packet.payload.state.total_transferred = server_data->total_transferred;
     update_packet.payload.state.total_balance = server_data->total_balance;
     update_packet.payload.state.num_clients = server_data->clients.size();
     
-    lock.unlock();
+    // ja que não tem o lock, não precisa do unlock
+    // lock.unlock();
     
     // converte para network order
     packet_host_to_net(&update_packet);
