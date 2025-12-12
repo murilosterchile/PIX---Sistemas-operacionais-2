@@ -29,6 +29,8 @@
 /** @brief Tamanho máximo do buffer de recepção UDP */
 #define UDP_BUFFER_SIZE 1024
 
+#define MAX_TRANSMISSAO 400
+#define MAX_PROCESSAMENTO 200
 // ============================================================================
 // TIPOS DE MENSAGEM
 // ============================================================================

@@ -1,5 +1,6 @@
 #include "discovery.h"
 #include "../common/utils.h"
+#include <cstdint>
 #include <iostream>
 #include <cstring>
 #include <unistd.h>
@@ -51,11 +52,20 @@ void DiscoveryService::listenForDiscovery() {
     sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
 
+    running_election = startElection();
+
     std::cout << "Aguardando mensagens de descoberta..." << std::endl;
     
     while (running) {
+	if(server_data->is_leader){
+	    sendHeartbeat();
+	}else if(std::chrono::steady_clock::now()-last_heartbeat_time > 2*MAX_TRANSMISSAO + MAX_PROCESSAMENTO && !running_election){
+	    running_election = startElection();
+	}
+
         ssize_t recv_len = recvfrom(socket_fd, buffer, sizeof(buffer), 0,
                                    (struct sockaddr*)&client_addr, &client_len);
+
         
         if (recv_len > 0) {
             std::cout << "Recebida mensagem de " << ipToString(client_addr.sin_addr.s_addr) 
@@ -68,7 +78,7 @@ void DiscoveryService::listenForDiscovery() {
                 
                 std::cout << "Tipo de pacote: " << packet.type << std::endl;
                 
-		if(!server_data->is_leader){
+		if(server_data->is_leader){
 			if (static_cast<PacketType>(packet.type) == DESCOBERTA) {
 			    std::cout << "Processando descoberta de " << ipToString(client_addr.sin_addr.s_addr) << std::endl;
 			    handleDiscoveryRequest(client_addr);
@@ -77,12 +87,12 @@ void DiscoveryService::listenForDiscovery() {
 			last_heartbeat_time = std::chrono::steady_clock::now();
 		} else if (static_cast<PacketType>(packet.type) == ELECTION) {
 			sendElectionResponse(client_addr);
-			if(!running_election) startElection();
+			if(!running_election) running_election = startElection();
 		} else if (static_cast<PacketType>(packet.type) == COORDINATOR) {
 		    	std::unique_lock<std::shared_mutex> lock(server_data->rw_mutex);
-			server_data->leader_address = packet.payload.coord.address;
+			server_data->leader_address = client_addr.sin_addr.s_addr;
 		    	lock.unlock();
-			sendCoordinatorMessage(packet.payload.coord.address);
+			running_election = false;
 		}
             } else {
                 std::cout << "Pacote com tamanho incorreto: " << recv_len << " (esperado: " << PACKET_SIZE << ")" << std::endl;
@@ -91,6 +101,42 @@ void DiscoveryService::listenForDiscovery() {
     }
 }
 
+bool startElection(){
+//implementar
+    return true;
+}
+
+void DiscoveryService::sendCoordinatorMessage() {
+    packet_t response;
+    init_packet(&response, COORDINATOR, 0);
+
+    char hostname[256];
+    gethostname(hostname, sizeof(hostname));
+    
+    packet_host_to_net(&response);
+    
+    std::vector<std::string> broadcast_addrs = {
+        "255.255.255.255",  // Broadcast global
+        "127.255.255.255",  // Localhost broadcast  
+        "192.168.255.255",  // Broadcast típico de rede local
+        "10.255.255.255"    // Outro broadcast comum
+    };
+    
+    for (const auto& broadcast_addr : broadcast_addrs) {
+        sockaddr_in broadcast_sockaddr;
+        memset(&broadcast_sockaddr, 0, sizeof(broadcast_sockaddr));
+        broadcast_sockaddr.sin_family = AF_INET;
+        broadcast_sockaddr.sin_port = htons(port);
+        
+        if (inet_aton(broadcast_addr.c_str(), &broadcast_sockaddr.sin_addr)) {
+            ssize_t sent = sendto(socket_fd, &response, sizeof(response), 0,
+                                 (struct sockaddr*)&broadcast_sockaddr, sizeof(broadcast_sockaddr));
+            
+            std::cout << "Enviado broadcast de coordinator para " << broadcast_addr 
+                      << " (bytes enviados: " << sent << ")" << std::endl;
+        }
+    }
+}
 
 void DiscoveryService::sendElectionResponse(const sockaddr_in& client_addr) {
     packet_t response;

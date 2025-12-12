@@ -30,7 +30,9 @@ private:
     void handleDiscoveryRequest(const sockaddr_in& client_addr);
     void sendDiscoveryResponse(const sockaddr_in& client_addr);
     void sendElectionResponse(const sockaddr_in& client_addr);
-    void startElection();
+    bool startElection();
+    void sendCoordinatorMessage();
+    void sendHeartbeat();
 };
 
 #endif
