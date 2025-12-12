@@ -101,9 +101,9 @@ void ClientProcessor::request(const std::string& ip, int value) {
             }
         //if couldn receive data from socket
         } else {
+	    server_ip = discovery.discoverServer();
             //timeout reached
             if(errno == EAGAIN || errno == EWOULDBLOCK){
-		server_ip = discovery.discoverServer();
                 D_PRINT("timeout");
             //another error
             }else{
