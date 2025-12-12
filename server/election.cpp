@@ -37,15 +37,16 @@ void ElectionService::start() {
     running = true;
     listener_thread = std::thread(&ElectionService::listenForElectionMessages, this);
     
-    // Se for primário, envia heartbeat
+    // Se for primário, seta a flag para o loop saber o que fazer
     if (server_data->config->status == PRIMARY) {
         is_sending_heartbeat = true;
-        heartbeat_thread = std::thread(&ElectionService::sendHeartbeatLoop, this);
     } else {
-        // Se for backup, monitora heartbeat
         is_sending_heartbeat = false;
-        heartbeat_thread = std::thread(&ElectionService::monitorHeartbeat, this);
     }
+
+    // CORREÇÃO: Sempre inicia pela monitorHeartbeat. 
+    // Ela saberá chamar a sendHeartbeatLoop se is_sending_heartbeat for true.
+    heartbeat_thread = std::thread(&ElectionService::monitorHeartbeat, this);
     
     std::cout << "[ELECTION] ElectionService iniciado na porta " << election_port << std::endl;
 }
@@ -115,26 +116,33 @@ void ElectionService::monitorHeartbeat() {
         // Se virou primário, começar a enviar heartbeat
         if (is_sending_heartbeat) {
             sendHeartbeatLoop();
-            break; // Sair do loop de monitoramento
+            
+            // CORREÇÃO: Removido o 'break'. 
+            // Se sendHeartbeatLoop retornar (pq deixou de ser lider),
+            // atualizamos o last_heartbeat e continuamos monitorando.
+            last_heartbeat = std::chrono::steady_clock::now();
+            continue; 
         }
         
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
         
         // Só monitora se for backup
         if (server_data->config->status != BACKUP) {
+            // ... (código existente mantido)
             last_heartbeat = std::chrono::steady_clock::now();
             continue;
         }
         
+        // ... (código de verificação de timeout existente mantido) ...
         auto now = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
             now - last_heartbeat).count();
         
         if (elapsed > HEARTBEAT_TIMEOUT_MS && !election_in_progress) {
-            std::cout << "[ELECTION] Primário não responde (timeout: " << elapsed 
+             // ... (código existente mantido)
+             std::cout << "[ELECTION] Primário não responde (timeout: " << elapsed 
                       << "ms)! Iniciando eleição..." << std::endl;
             startElection();
-            // Aguardar um pouco antes de verificar novamente
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         }
     }
@@ -301,6 +309,20 @@ void ElectionService::sendHeartbeat() {
 }
 
 void ElectionService::handleHeartbeat(const packet_t& packet, const sockaddr_in& sender) {
+    // CORREÇÃO: Verificar conflito de liderança
+    // O seqn do pacote de heartbeat carrega o ID do remetente
+    uint32_t sender_id = packet.seqn; 
+    
+    // Se eu sou PRIMARY, mas recebo heartbeat de um ID maior, devo renunciar
+    if (server_data->config->status == PRIMARY && sender_id > server_data->config->my_id) {
+        std::cout << "[ELECTION] Conflito detectado! Recebido Heartbeat de ID maior (" 
+                  << sender_id << "). Renunciando liderança..." << std::endl;
+        
+        server_data->config->status = BACKUP;
+        is_sending_heartbeat = false;
+        // A thread sendHeartbeatLoop vai encerrar e voltará para monitorHeartbeat
+    }
+
     last_heartbeat = std::chrono::steady_clock::now();
     
     // Responder com ACK

@@ -25,6 +25,9 @@ public:
     
     // é chamado pelo primário após cada transação
     void propagateState();
+
+    // NOVO: Método para pedir sincronização ao iniciar
+    void requestSync();
     
 private:
     // Thread que escuta updates, quando for um backup
@@ -35,6 +38,9 @@ private:
     
     // envia o estado para um backup específico
     void sendStateToBackup(const PeerInfo& peer);
+
+    // Processa o pedido de sync vindo de outro servidor
+    void handleSyncRequest(const sockaddr_in& sender);
 };
 
 #endif

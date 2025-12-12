@@ -1,6 +1,8 @@
 #include <iostream>
 #include <memory>
 #include <csignal>
+#include <thread>
+#include <chrono>
 #include "discovery.h"
 #include "processing.h"
 #include "interface.h"
@@ -80,16 +82,11 @@ int main(int argc, char* argv[]) {
         }
     }
     
-    // definimos o status, o servidor com maior ID é primário inicial
-    if (server_config->hasHighestId()) {
-        server_config->status = PRIMARY;
-        std::cout << "[CONFIG] Este servidor (ID=" << server_id 
-                  << ") é o primário inicial" << std::endl;
-    } else {
-        server_config->status = BACKUP;
-        std::cout << "[CONFIG] Este servidor (ID=" << server_id 
-                  << ") é BACKUP" << std::endl;
-    }
+    // --- LÓGICA DE STATUS INICIAL (MODIFICADA) ---
+    // NUNCA inicie como PRIMARY automaticamente. 
+    // Inicie sempre como BACKUP para proteger os dados.
+    server_config->status = BACKUP;
+    std::cout << "[CONFIG] Iniciando como BACKUP para sincronização..." << std::endl;
     
     // configurando handler de sinal
     signal(SIGINT, signalHandler);
@@ -119,6 +116,25 @@ int main(int argc, char* argv[]) {
         
         std::cout << "Servidor iniciado na porta " << port << std::endl;
         std::cout << "Pressione Ctrl+C para encerrar" << std::endl;
+        
+        // --- LÓGICA DE STARTUP SEGURO ---
+        
+        // 1. Tenta pegar os dados mais recentes de quem estiver vivo
+        // (Isso envia um SYNC_REQ para os peers)
+        replication_service->requestSync();
+        
+        // 2. Dá um tempo para os dados chegarem (1.5 segundos)
+        std::cout << "Aguardando sincronização de dados..." << std::endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+        
+        // 3. Agora que (provavelmente) estamos sincronizados, verificamos a liderança
+        if (server_config->hasHighestId()) {
+            std::cout << "Sou o servidor com maior ID. Iniciando eleição para assumir..." << std::endl;
+            // Se eu tenho o maior ID, inicio uma eleição para me tornar o líder oficial
+            election_service->startElection();
+        } else {
+            std::cout << "Não sou o maior ID. Permanecendo como Backup." << std::endl;
+        }
         
         // Loop principal
         while (true) {

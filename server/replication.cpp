@@ -35,6 +35,11 @@ void ReplicationService::start() {
     running = true;
     listener_thread = std::thread(&ReplicationService::listenForUpdates, this);
     std::cout << "ReplicationService iniciado na porta " << repl_port << std::endl;
+    
+    // Se sou backup, peço os dados atuais imediatamente
+    if (server_data->config->status == BACKUP) {
+        requestSync();
+    }
 }
 
 void ReplicationService::stop() {
@@ -61,22 +66,17 @@ void ReplicationService::propagateState() {
 }
 
 void ReplicationService::sendStateToBackup(const PeerInfo& peer) {
-    // esse lock tava dando erro
-    // std::shared_lock<std::shared_mutex> lock(server_data->rw_mutex);
+    // REMOVIDO LOCK: O mutex já está trancado pela thread de processamento
     
     // faz o pacote de update
     packet_t update_packet;
     init_packet(&update_packet, STATE_UPDATE, 0);
     
     // preenche dados
-    // Acesso seguro pois handleRequestThread mantém o lock de escrita
     update_packet.payload.state.num_transactions = server_data->num_transactions;
     update_packet.payload.state.total_transferred = server_data->total_transferred;
     update_packet.payload.state.total_balance = server_data->total_balance;
     update_packet.payload.state.num_clients = server_data->clients.size();
-    
-    // ja que não tem o lock, não precisa do unlock
-    // lock.unlock();
     
     // converte para network order
     packet_host_to_net(&update_packet);
@@ -105,7 +105,6 @@ void ReplicationService::listenForUpdates() {
     std::cout << "[REPLICATION] Aguardando updates de estado..." << std::endl;
     
     while (running) {
-        // Timeout para verificar running periodicamente
         fd_set readfds;
         FD_ZERO(&readfds);
         FD_SET(socket_fd, &readfds);
@@ -117,7 +116,7 @@ void ReplicationService::listenForUpdates() {
         int activity = select(socket_fd + 1, &readfds, NULL, NULL, &timeout);
         
         if (activity < 0) continue;
-        if (activity == 0) continue; // timeout
+        if (activity == 0) continue;
         
         ssize_t recv_len = recvfrom(socket_fd, buffer, sizeof(buffer), 0,
                                    (struct sockaddr*)&sender_addr, &sender_len);
@@ -127,24 +126,29 @@ void ReplicationService::listenForUpdates() {
             memcpy(&packet, buffer, sizeof(packet_t));
             packet_net_to_host(&packet);
             
-            if (static_cast<PacketType>(packet.type) == STATE_UPDATE) {
-                std::cout << "[REPLICATION] Recebido update de " 
-                          << ipToString(sender_addr.sin_addr.s_addr) << std::endl;
-                handleStateUpdate(packet);
+            PacketType type = static_cast<PacketType>(packet.type);
+            
+            if (type == STATE_UPDATE) {
+                if (server_data->config->status == BACKUP) {
+                    std::cout << "[REPLICATION] Recebido update de " 
+                              << ipToString(sender_addr.sin_addr.s_addr) << std::endl;
+                    handleStateUpdate(packet);
+                }
+            }
+            else if (type == SYNC_REQ) {
+                handleSyncRequest(sender_addr);
             }
         }
     }
 }
 
 void ReplicationService::handleStateUpdate(const packet_t& packet) {
-    // somente aceita updates se for backup
     if (server_data->config->status != BACKUP) {
         return;
     }
     
     std::unique_lock<std::shared_mutex> lock(server_data->rw_mutex);
     
-    // aplica o estado recebido
     server_data->num_transactions = packet.payload.state.num_transactions;
     server_data->total_transferred = packet.payload.state.total_transferred;
     server_data->total_balance = packet.payload.state.total_balance;
@@ -153,9 +157,52 @@ void ReplicationService::handleStateUpdate(const packet_t& packet) {
               << " total_transferred=" << server_data->total_transferred
               << " total_balance=" << server_data->total_balance << std::endl;
     
-    // manda um sinal de atualização para interface
     server_data->has_update = true;
     
     lock.unlock();
     server_data->data_updated.notify_all();
+}
+
+void ReplicationService::requestSync() {
+    packet_t req_packet;
+    init_packet(&req_packet, SYNC_REQ, server_data->config->my_id);
+    packet_host_to_net(&req_packet);
+    
+    std::cout << "[REPLICATION] Solicitando sincronização inicial aos peers..." << std::endl;
+    
+    for (const auto& peer : server_data->config->peers) {
+        sockaddr_in peer_addr;
+        memset(&peer_addr, 0, sizeof(peer_addr));
+        peer_addr.sin_family = AF_INET;
+        inet_aton(peer.ip.c_str(), &peer_addr.sin_addr);
+        peer_addr.sin_port = htons(peer.repl_port);
+        
+        sendto(socket_fd, &req_packet, sizeof(req_packet), 0,
+               (struct sockaddr*)&peer_addr, sizeof(peer_addr));
+    }
+}
+
+void ReplicationService::handleSyncRequest(const sockaddr_in& sender) {
+    if (server_data->config->status != PRIMARY) {
+        return;
+    }
+
+    std::cout << "[REPLICATION] Recebido pedido de SYNC de " 
+              << ipToString(sender.sin_addr.s_addr) << ". Enviando estado..." << std::endl;
+
+    packet_t update_packet;
+    init_packet(&update_packet, STATE_UPDATE, 0);
+    
+    {
+        std::shared_lock<std::shared_mutex> lock(server_data->rw_mutex);
+        update_packet.payload.state.num_transactions = server_data->num_transactions;
+        update_packet.payload.state.total_transferred = server_data->total_transferred;
+        update_packet.payload.state.total_balance = server_data->total_balance;
+        update_packet.payload.state.num_clients = server_data->clients.size();
+    }
+    
+    packet_host_to_net(&update_packet);
+    
+    sendto(socket_fd, &update_packet, sizeof(update_packet), 0,
+           (struct sockaddr*)&sender, sizeof(sender));
 }

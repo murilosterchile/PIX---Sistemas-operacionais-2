@@ -52,7 +52,10 @@ enum PacketType : uint16_t {
     
     // Heartbeat
     HEARTBEAT      = 9,  // Verificar se primário está vivo
-    HEARTBEAT_ACK  = 10  // Resposta ao heartbeat
+    HEARTBEAT_ACK  = 10, // Resposta ao heartbeat
+
+    //Sinc
+    SYNC_REQ       = 11  // Requisição de sincronização
 };
 
 // ============================================================================
@@ -200,10 +203,15 @@ inline void packet_net_to_host(packet_t* packet) {
             case HEARTBEAT_ACK:
                 // sem payload específico
                 break;
+            case SYNC_REQ:
+            // sem payload específico
+                break;
                 
             default:
                 // tipo inválido
                 break;
+
+            
         }
     }
 }
@@ -248,6 +256,9 @@ inline void packet_host_to_net(packet_t* packet) {
             case COORDINATOR:
             case HEARTBEAT:
             case HEARTBEAT_ACK:
+                // sem payload específico
+                break;
+            case SYNC_REQ:  // <--- ADICIONE AQUI
                 // sem payload específico
                 break;
         }
