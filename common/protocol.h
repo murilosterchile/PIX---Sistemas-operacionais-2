@@ -40,12 +40,23 @@ enum PacketType : uint16_t {
     DESCOBERTA     = 1,  /**< Cliente solicita descoberta do servidor (broadcast) */
     REQUISICAO     = 2,  /**< Cliente envia requisição de transação (unicast) */
     DESCOBERTA_ACK = 3,  /**< Servidor responde à descoberta (unicast) */
-    REQUISICAO_ACK = 4   /**< Servidor responde à requisição (unicast) */
+    REQUISICAO_ACK = 4,   /**< Servidor responde à requisição (unicast) */
+    HEARTBEAT 	   = 5,   /**< Escuta heartbeat do lider*/
+    ELECTION 	   = 6,   /**< Comeca eleicao*/
+    ANSWER 	   = 7,   /**<  Responde election*/
+    COORDINATOR	   = 8   /**< Anuncia processo eleito*/
 };
 
 // ============================================================================
 // ESTRUTURAS DE DADOS
 // ============================================================================
+
+/**
+ * @brief Estrutura do anuncio de processo eleito
+ */
+struct coordinator {
+    uint32_t address;
+} __attribute__((packed));
 
 /**
  * @brief Estrutura da requisição de transação
@@ -98,6 +109,7 @@ typedef struct packet {
         struct requisicao_ack req_ack;  /**< Dados de confirmação de requisição */
         struct descoberta disc;         /**< Dados de descoberta (vazio) */
         struct descoberta_ack disc_ack; /**< Dados de confirmação de descoberta */
+        struct coordinator coord; /**< Dados de confirmação de descoberta */
     } payload;
     
 } __attribute__((packed)) packet_t;

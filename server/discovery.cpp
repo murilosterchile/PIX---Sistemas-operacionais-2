@@ -21,6 +21,9 @@ DiscoveryService::DiscoveryService(uint16_t port, ServerData* data)
         close(socket_fd);
         throw std::runtime_error("Erro no bind do socket de descoberta");
     }
+
+    std::chrono::steady_clock::time_point last_heartbeat_time = std::chrono::steady_clock::now();
+    bool running_election = false;
 }
 
 DiscoveryService::~DiscoveryService() {
@@ -47,7 +50,7 @@ void DiscoveryService::listenForDiscovery() {
     char buffer[PACKET_SIZE];
     sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
-    
+
     std::cout << "Aguardando mensagens de descoberta..." << std::endl;
     
     while (running) {
@@ -65,15 +68,44 @@ void DiscoveryService::listenForDiscovery() {
                 
                 std::cout << "Tipo de pacote: " << packet.type << std::endl;
                 
-                if (static_cast<PacketType>(packet.type) == DESCOBERTA) {
-                    std::cout << "Processando descoberta de " << ipToString(client_addr.sin_addr.s_addr) << std::endl;
-                    handleDiscoveryRequest(client_addr);
-                }
+		if(!server_data->is_leader){
+			if (static_cast<PacketType>(packet.type) == DESCOBERTA) {
+			    std::cout << "Processando descoberta de " << ipToString(client_addr.sin_addr.s_addr) << std::endl;
+			    handleDiscoveryRequest(client_addr);
+			}
+                } else if (static_cast<PacketType>(packet.type) == HEARTBEAT) {
+			last_heartbeat_time = std::chrono::steady_clock::now();
+		} else if (static_cast<PacketType>(packet.type) == ELECTION) {
+			sendElectionResponse(client_addr);
+			if(!running_election) startElection();
+		} else if (static_cast<PacketType>(packet.type) == COORDINATOR) {
+		    	std::unique_lock<std::shared_mutex> lock(server_data->rw_mutex);
+			server_data->leader_address = packet.payload.coord.address;
+		    	lock.unlock();
+			sendCoordinatorMessage(packet.payload.coord.address);
+		}
             } else {
                 std::cout << "Pacote com tamanho incorreto: " << recv_len << " (esperado: " << PACKET_SIZE << ")" << std::endl;
             }
         }
     }
+}
+
+
+void DiscoveryService::sendElectionResponse(const sockaddr_in& client_addr) {
+    packet_t response;
+    init_packet(&response, ANSWER, 0);
+
+    char hostname[256];
+    gethostname(hostname, sizeof(hostname));
+    
+    packet_host_to_net(&response);
+    
+    ssize_t sent = sendto(socket_fd, &response, sizeof(response), 0,
+                         (struct sockaddr*)&client_addr, sizeof(client_addr));
+    
+    std::cout << "Enviada resposta para eleicao de " << ipToString(client_addr.sin_addr.s_addr) 
+              << " (bytes enviados: " << sent << ")" << std::endl;
 }
 
 void DiscoveryService::handleDiscoveryRequest(const sockaddr_in& client_addr) {
@@ -97,6 +129,7 @@ void DiscoveryService::handleDiscoveryRequest(const sockaddr_in& client_addr) {
         // Marcar que houve atualização
         server_data->has_update = true;
     }
+    
     
     lock.unlock();
     

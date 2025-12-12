@@ -16,9 +16,21 @@ struct ClientInfo {
     ClientInfo(uint32_t addr) : address(addr), last_req(0), balance(100) {}
 };
 
+struct ServerInfo {
+    uint32_t address;     // IP do servidor (network order)
+    uint32_t id;
+    
+    ServerInfo() : address(0), id(0) {}
+    ServerInfo(uint32_t addr, uint32_t id) : address(addr), id(id) {}
+};
+
 struct ServerData {
     // Dados dos clientes
     std::unordered_map<uint32_t, ClientInfo> clients;
+    std::unordered_map<uint32_t, ServerInfo> servers;
+
+    uint32_t leader_address;
+    bool is_leader;
     
     uint32_t num_transactions;
     uint32_t total_transferred;

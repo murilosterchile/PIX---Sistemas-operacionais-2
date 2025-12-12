@@ -4,6 +4,12 @@
 #include <sstream>
 #include <iomanip>
 #include <regex>
+#include <iostream>
+#include <sstream>
+#include <vector>
+#include <stdexcept>
+#include <ifaddrs.h>
+#include <cstring>
 
 std::string ipToString(uint32_t ip_addr) {
     struct in_addr addr;
@@ -62,4 +68,65 @@ void setSocketTimeout(int socket_fd, int timeout_ms) {
     
     setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, 
                &timeout, sizeof(timeout));
+}
+
+std::string getOwnIpAddress() {
+    struct ifaddrs* ifaddr;
+    char ip[INET_ADDRSTRLEN];
+
+    if (getifaddrs(&ifaddr) == -1) {
+        perror("getifaddrs");
+        throw std::runtime_error("Failed to get network interfaces.");
+    }
+
+    std::string ip_address;
+    for (struct ifaddrs* ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == nullptr) continue;
+
+        if (ifa->ifa_addr->sa_family == AF_INET) {
+            struct sockaddr_in* sa = (struct sockaddr_in*)ifa->ifa_addr;
+            inet_ntop(AF_INET, &(sa->sin_addr), ip, INET_ADDRSTRLEN);
+
+            if (strcmp(ip, "127.0.0.1") != 0) {  // Skip the loopback address
+                ip_address = ip;
+                break;
+            }
+        }
+    }
+
+    freeifaddrs(ifaddr);
+
+    if (ip_address.empty()) {
+        throw std::runtime_error("No valid IP address found.");
+    }
+
+    return ip_address;
+}
+
+int parseLastOctet(const std::string& ip_address) {
+    std::stringstream ss(ip_address);
+    std::string segment;
+    std::vector<std::string> octets;
+
+    while (std::getline(ss, segment, '.')) {
+        octets.push_back(segment);
+    }
+
+    if (octets.size() != 4) {
+        throw std::invalid_argument("Invalid IP address format: " + ip_address);
+    }
+
+    return std::stoi(octets[3]);  // Return the last octet
+}
+
+int serverID() {
+    try {
+        std::string ip_address = getOwnIpAddress();
+        int last_octet = parseLastOctet(ip_address);
+        std::cout << "Server IP: " << ip_address << ", last octet: " << last_octet << std::endl;
+        return last_octet;
+    } catch (const std::exception& e) {
+        std::cerr << "Failed to derive server ID: " << e.what() << std::endl;
+        throw;
+    }
 }

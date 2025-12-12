@@ -22,4 +22,9 @@ int createUdpSocket();
 int configureBroadcast(int socket_fd);
 void setSocketTimeout(int socket_fd, int timeout_ms);
 
+// Server ID generation
+std::string getOwnIpAddress();
+int parseLastOctet(const std::string& ip_address);
+int serverID();
+
 #endif
