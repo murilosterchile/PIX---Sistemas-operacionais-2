@@ -25,7 +25,7 @@ int main(int argc, char* argv[]) {
         
         std::cout << getCurrentTimestamp() << " server_addr " << server_ip << std::endl;
 
-        ClientProcessor processor(server_ip, port);
+        ClientProcessor processor(server_ip, port, discovery);
         ClientInterface interface(processor);
 
         //roda a interface (thread de input e de output) que vai se comunicar com o modulo de processamento que manda requisicoes para o servidor

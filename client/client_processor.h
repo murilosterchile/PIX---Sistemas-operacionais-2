@@ -10,6 +10,7 @@
 #include "../common/protocol.h"
 #include "../common/utils.h"
 #include "../common/debug.h"
+#include "client_discovery.h"
 
 typedef struct response_data{
     bool success;
@@ -22,7 +23,7 @@ typedef struct response_data{
 
 class ClientProcessor {
 public:
-    ClientProcessor(const std::string& server_ip, uint16_t server_port);
+    ClientProcessor(const std::string& server_ip, uint16_t server_port, ClientDiscovery& discovery);
     void request(const std::string& ip, int value);
     response_data_t getResponse();
 
@@ -34,6 +35,7 @@ private:
     std::queue<response_data_t> response_queue;
     std::mutex queue_mutex;
     std::condition_variable cv;
+    ClientDiscovery& discovery;
 };
 
 #endif // CLIENT_PROCESSOR_H

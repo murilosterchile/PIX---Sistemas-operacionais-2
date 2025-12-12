@@ -10,8 +10,8 @@
 #include <chrono>
 
 
-ClientProcessor::ClientProcessor(const std::string& server_ip, uint16_t server_port)
-    : server_ip(server_ip), server_port(server_port), current_id(1) {
+ClientProcessor::ClientProcessor(const std::string& server_ip, uint16_t server_port, ClientDiscovery& discovery)
+    : server_ip(server_ip), server_port(server_port), current_id(1), discovery(discovery){
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if(sockfd<0){
         perror("Failed to create socket for processor");
@@ -103,6 +103,7 @@ void ClientProcessor::request(const std::string& ip, int value) {
         } else {
             //timeout reached
             if(errno == EAGAIN || errno == EWOULDBLOCK){
+		server_ip = discovery.discoverServer();
                 D_PRINT("timeout");
             //another error
             }else{
