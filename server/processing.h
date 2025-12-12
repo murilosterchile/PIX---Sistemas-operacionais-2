@@ -7,6 +7,7 @@
 #include <netinet/in.h>
 #include "../common/protocol.h"
 #include "../common/server_data.h"
+#include "replication.h"
 
 class ProcessingService {
 private:
@@ -15,9 +16,10 @@ private:
     ServerData* server_data;
     std::thread listener_thread;
     std::atomic<bool> running;
+    ReplicationService* replication_service;
 
 public:
-    ProcessingService(uint16_t port, ServerData* data);
+    ProcessingService(uint16_t port, ServerData* data, ReplicationService* repl_svc = nullptr);
     ~ProcessingService();
 
     void start();

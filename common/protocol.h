@@ -40,7 +40,19 @@ enum PacketType : uint16_t {
     DESCOBERTA     = 1,  /**< Cliente solicita descoberta do servidor (broadcast) */
     REQUISICAO     = 2,  /**< Cliente envia requisição de transação (unicast) */
     DESCOBERTA_ACK = 3,  /**< Servidor responde à descoberta (unicast) */
-    REQUISICAO_ACK = 4   /**< Servidor responde à requisição (unicast) */
+    REQUISICAO_ACK = 4,  /**< Servidor responde à requisição (unicast) */
+    
+    // Replicação
+    STATE_UPDATE   = 5,  // Primário -> Backup: estado completo
+    
+    // Eleição
+    ELECTION       = 6,  // Iniciar eleição
+    OK             = 7,  // Resposta à eleição
+    COORDINATOR    = 8,  // Anunciar novo líder
+    
+    // Heartbeat
+    HEARTBEAT      = 9,  // Verificar se primário está vivo
+    HEARTBEAT_ACK  = 10  // Resposta ao heartbeat
 };
 
 // ============================================================================
@@ -82,6 +94,24 @@ struct descoberta_ack {
     uint8_t  padding;     /**< Padding para alinhamento */
 } __attribute__((packed));
 
+/**
+ * @brief estrutura vazia para mensagens simples, como election, ok, coordinator, heartbeat
+ */
+struct simple_message {
+    uint8_t reserved[4];  /**< Bytes reservados */
+} __attribute__((packed));
+
+/**
+ * @brief Estrutura de update de estado
+ */
+struct state_update {
+    uint32_t num_transactions;  /**< Número total de transações */
+    uint32_t total_transferred; /**< Valor total transferido */
+    uint32_t total_balance;     /**< Saldo total do sistema */
+    uint32_t num_clients;       /**< Número de clientes */
+    // Dados dos clientes virão em pacotes separados se necessário
+} __attribute__((packed));
+
 // ============================================================================
 // ESTRUTURA PRINCIPAL DO PROTOCOLO
 // ============================================================================
@@ -98,6 +128,8 @@ typedef struct packet {
         struct requisicao_ack req_ack;  /**< Dados de confirmação de requisição */
         struct descoberta disc;         /**< Dados de descoberta (vazio) */
         struct descoberta_ack disc_ack; /**< Dados de confirmação de descoberta */
+        struct state_update state;      /**< Dados de replicação de estado */
+        struct simple_message simple;   /**< Mensagens simples */
     } payload;
     
 } __attribute__((packed)) packet_t;
@@ -110,7 +142,7 @@ typedef struct packet {
 #define PACKET_SIZE sizeof(packet_t)
 
 // ============================================================================
-// FUNÇÕES DE CONVERSÃO CORRIGIDAS
+// FUNÇÕES DE CONVERSÃO
 // ============================================================================
 
 /**
@@ -153,9 +185,24 @@ inline void packet_net_to_host(packet_t* packet) {
             case DESCOBERTA:
                 // Nenhuma conversão necessária
                 break;
+            
+            case STATE_UPDATE:
+                packet->payload.state.num_transactions = ntohl(packet->payload.state.num_transactions);
+                packet->payload.state.total_transferred = ntohl(packet->payload.state.total_transferred);
+                packet->payload.state.total_balance = ntohl(packet->payload.state.total_balance);
+                packet->payload.state.num_clients = ntohl(packet->payload.state.num_clients);
+                break;
+                
+            case ELECTION:
+            case OK:
+            case COORDINATOR:
+            case HEARTBEAT:
+            case HEARTBEAT_ACK:
+                // sem payload específico
+                break;
                 
             default:
-                // Tipo inválido - não converter
+                // tipo inválido
                 break;
         }
     }
@@ -187,6 +234,21 @@ inline void packet_host_to_net(packet_t* packet) {
                 
             case DESCOBERTA:
                 // Nenhuma conversão necessária
+                break;
+                
+            case STATE_UPDATE:
+                packet->payload.state.num_transactions = htonl(packet->payload.state.num_transactions);
+                packet->payload.state.total_transferred = htonl(packet->payload.state.total_transferred);
+                packet->payload.state.total_balance = htonl(packet->payload.state.total_balance);
+                packet->payload.state.num_clients = htonl(packet->payload.state.num_clients);
+                break;
+                
+            case ELECTION:
+            case OK:
+            case COORDINATOR:
+            case HEARTBEAT:
+            case HEARTBEAT_ACK:
+                // sem payload específico
                 break;
         }
         

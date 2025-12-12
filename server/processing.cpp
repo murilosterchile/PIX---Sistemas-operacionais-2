@@ -10,8 +10,8 @@
 #include <arpa/inet.h>
 #include <memory>
 
-ProcessingService::ProcessingService(uint16_t port, ServerData* data)
-    : port(port), server_data(data), running(false) {
+ProcessingService::ProcessingService(uint16_t port, ServerData* data, ReplicationService* repl_svc)
+    : port(port), server_data(data), replication_service(repl_svc), running(false) {
     socket_fd = createUdpSocket();
     sockaddr_in server_addr;
     memset(&server_addr, 0, sizeof(server_addr));
@@ -109,6 +109,10 @@ void ProcessingService::handleRequestThread(packet_t packet, sockaddr_in client_
     client.last_req = packet.seqn;
     server_data->num_transactions++;
     server_data->total_transferred += packet.payload.req.value;
+    // propaga o estado para backups, somente se for o primario
+    if (replication_service && server_data->config->status == PRIMARY) {
+        replication_service->propagateState();
+    }
 
     displayTransaction(packet, client_ip, false);
 

@@ -25,10 +25,14 @@ COMMON_HEADERS = $(COMMON_DIR)/protocol.h $(COMMON_DIR)/utils.h $(COMMON_DIR)/se
 SERVER_SOURCES = $(SERVER_DIR)/servidor.cpp \
                  $(SERVER_DIR)/discovery.cpp \
                  $(SERVER_DIR)/processing.cpp \
-                 $(SERVER_DIR)/interface.cpp
+                 $(SERVER_DIR)/interface.cpp \
+                 $(SERVER_DIR)/replication.cpp \
+                 $(SERVER_DIR)/election.cpp
 SERVER_HEADERS = $(SERVER_DIR)/discovery.h \
                  $(SERVER_DIR)/processing.h \
-                 $(SERVER_DIR)/interface.h
+                 $(SERVER_DIR)/interface.h \
+                 $(SERVER_DIR)/replication.h \
+                 $(SERVER_DIR)/election.h
 
 # Arquivos fonte do cliente
 CLIENT_SOURCES = $(CLIENT_DIR)/cliente.cpp \

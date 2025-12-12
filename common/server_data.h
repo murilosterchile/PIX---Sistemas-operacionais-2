@@ -1,6 +1,7 @@
 #ifndef SERVER_DATA_H
 #define SERVER_DATA_H
 
+#include "server_config.h"
 #include <unordered_map>
 #include <shared_mutex>
 #include <condition_variable>
@@ -17,6 +18,9 @@ struct ClientInfo {
 };
 
 struct ServerData {
+    // configuração do servidor
+    ServerConfig* config;
+    
     // Dados dos clientes
     std::unordered_map<uint32_t, ClientInfo> clients;
     
@@ -28,8 +32,9 @@ struct ServerData {
     std::condition_variable_any data_updated;
     bool has_update;
     
-    ServerData() : num_transactions(0), total_transferred(0), 
-                   total_balance(0), has_update(false) {}
+    ServerData(ServerConfig* cfg) 
+        : config(cfg), num_transactions(0), total_transferred(0), 
+          total_balance(0), has_update(false) {}
 };
 
 #endif
