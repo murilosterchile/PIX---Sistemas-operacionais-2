@@ -207,14 +207,14 @@ void ClientProcessor::listenForNotifications() {
             packet_net_to_host(&packet);
             
             if (static_cast<PacketType>(packet.type) == LEADER_CHANGE) {
-                handleLeaderChange(packet);
+                handleLeaderChange(packet, sender_addr.sin_addr.s_addr);
             }
         }
     }
 }
 
-void ClientProcessor::handleLeaderChange(const packet_t& packet) {
-    std::string new_ip = ipToString(packet.payload.leader.new_leader_ip);
+void ClientProcessor::handleLeaderChange(const packet_t& packet, uint32_t sender_ip) {
+    std::string new_ip = ipToString(sender_ip);
     uint16_t new_port = packet.payload.leader.new_leader_port;
     
     std::cout << std::endl;
@@ -224,7 +224,7 @@ void ClientProcessor::handleLeaderChange(const packet_t& packet) {
     std::cout << "ID do líder: " << packet.payload.leader.new_leader_id << std::endl;
     std::cout << "========================================" << std::endl;
     
-    // Atualizar servidor
+    // Atualizaa o servidor
     server_ip = new_ip;
     server_port = new_port;
     

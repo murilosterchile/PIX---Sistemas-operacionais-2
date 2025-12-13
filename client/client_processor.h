@@ -44,7 +44,7 @@ private:
     std::atomic<bool> running;
     
     void listenForNotifications();
-    void handleLeaderChange(const packet_t& packet);
+    void handleLeaderChange(const packet_t& packet, uint32_t sender_ip);
 };
 
 #endif // CLIENT_PROCESSOR_H
