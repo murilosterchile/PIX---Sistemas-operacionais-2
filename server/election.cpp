@@ -4,12 +4,15 @@
 #include <cstring>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <ifaddrs.h>
+#include <net/if.h>
 
 ElectionService::ElectionService(uint16_t port, ServerData* data)
     : election_port(port + 200), server_data(data), running(false), 
       election_in_progress(false), is_sending_heartbeat(false) {
     
     socket_fd = createUdpSocket();
+    notification_sock = createUdpSocket();  // Socket separado para notificações
     
     // Bind na porta de eleição
     sockaddr_in election_addr;
@@ -30,6 +33,9 @@ ElectionService::~ElectionService() {
     stop();
     if (socket_fd >= 0) {
         close(socket_fd);
+    }
+    if (notification_sock >= 0) {
+        close(notification_sock);
     }
 }
 
@@ -253,6 +259,9 @@ void ElectionService::becomeCoordinator() {
     
     announceCoordinator();
     
+    // notifica clientes sobre a mudança de líder
+    notifyClientsOfLeaderChange();
+    
     std::cout << "[ELECTION] Agora enviando heartbeat como primário" << std::endl;
 }
 
@@ -336,4 +345,76 @@ void ElectionService::handleHeartbeat(const packet_t& packet, const sockaddr_in&
 
 void ElectionService::handleHeartbeatAck(const packet_t& packet, const sockaddr_in& sender) {
     // Primário recebe acks, apenas para confirmar que backup está vivo
+}
+
+void ElectionService::notifyClientsOfLeaderChange() {
+    std::cout << "[ELECTION] Notificando clientes sobre novo líder..." << std::endl;
+    
+    std::shared_lock<std::shared_mutex> lock(server_data->rw_mutex);
+    
+    // Descobrir o IP real da máquina
+    uint32_t my_ip = 0;
+    struct ifaddrs *ifaddrs_ptr;
+    
+    if (getifaddrs(&ifaddrs_ptr) == 0) {
+        for (struct ifaddrs *ifa = ifaddrs_ptr; ifa != nullptr; ifa = ifa->ifa_next) {
+            if (ifa->ifa_addr && ifa->ifa_addr->sa_family == AF_INET) {
+                struct sockaddr_in *addr_in = (struct sockaddr_in *)ifa->ifa_addr;
+                uint32_t ip = addr_in->sin_addr.s_addr;
+                
+                // Ignorar localhost (127.0.0.1)
+                if (ip != htonl(INADDR_LOOPBACK)) {
+                    my_ip = ip;
+                    std::cout << "[ELECTION] IP do servidor: " << ipToString(ip) << std::endl;
+                    break;  // Pega o primeiro IP não-localhost
+                }
+            }
+        }
+        freeifaddrs(ifaddrs_ptr);
+    }
+    
+    // Se não encontrou, usa o localhost como fallback
+    if (my_ip == 0) {
+        inet_aton("127.0.0.1", (struct in_addr*)&my_ip);
+        std::cout << "[ELECTION] Usando localhost como fallback" << std::endl;
+    }
+    
+    // Pegar informações do novo líder (eu mesmo)
+    packet_t leader_packet;
+    init_packet(&leader_packet, LEADER_CHANGE, server_data->config->my_id);
+    
+    leader_packet.payload.leader.new_leader_id = server_data->config->my_id;
+    leader_packet.payload.leader.new_leader_ip = my_ip;
+    leader_packet.payload.leader.new_leader_port = server_data->config->main_port;
+    
+    packet_host_to_net(&leader_packet);
+    
+    // enviar unicast para cada cliente conectado na porta de notificações
+    int notified = 0;
+    for (const auto& client_pair : server_data->clients) {
+        uint32_t client_ip = client_pair.first;
+        
+        sockaddr_in client_notify_addr;
+        memset(&client_notify_addr, 0, sizeof(client_notify_addr));
+        client_notify_addr.sin_family = AF_INET;
+        client_notify_addr.sin_addr.s_addr = client_ip;
+        client_notify_addr.sin_port = htons(40010);  // Porta fixa global para notificações
+        
+        ssize_t sent = sendto(notification_sock, &leader_packet, sizeof(leader_packet), 0,
+                             (struct sockaddr*)&client_notify_addr, sizeof(client_notify_addr));
+        
+        if (sent > 0) {
+            notified++;
+            std::cout << "[ELECTION] Notificação enviada para cliente " 
+                      << ipToString(client_ip) << ":40010"
+                      << " (bytes: " << sent << ")" << std::endl;
+        } else {
+            perror("[ELECTION] ERRO ao enviar");
+            std::cout << "[ELECTION] FALHA ao enviar para " 
+                      << ipToString(client_ip) << " (errno: " << errno << ")" << std::endl;
+        }
+    
+    std::cout << "[ELECTION] Notificação enviada para " << notified << " clientes" << std::endl;
+}
+
 }

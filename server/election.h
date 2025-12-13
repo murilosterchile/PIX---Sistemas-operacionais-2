@@ -12,6 +12,7 @@
 class ElectionService {
 private:
     int socket_fd;
+    int notification_sock;  // Socket para enviar notificações aos clientes
     uint16_t election_port;
     ServerData* server_data;
     std::thread listener_thread;
@@ -34,6 +35,9 @@ public:
     
     // inicia o processo de eleição
     void startElection();
+    
+    // notifica os clientes sobre mudança de líder
+    void notifyClientsOfLeaderChange();
     
 private:
     // Thread que escuta mensagens de eleição

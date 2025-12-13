@@ -8,16 +8,69 @@
 #include <sys/types.h>
 #include <thread>
 #include <chrono>
+#include <unistd.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <cstring>
 
 
 ClientProcessor::ClientProcessor(const std::string& server_ip, uint16_t server_port)
-    : server_ip(server_ip), server_port(server_port), current_id(1) {
+    : server_ip(server_ip), server_port(server_port), current_id(1), running(true) {
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if(sockfd<0){
         perror("Failed to create socket for processor");
         throw std::runtime_error("Failed to create socket for processor");
     }
+    
+    // cria o socket para receber notificações primeiro
+    notification_sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if(notification_sockfd < 0){
+        perror("Failed to create notification socket");
+        close(sockfd);
+        throw std::runtime_error("Failed to create notification socket");
+    }
+    
+    // permite múltiplos clientes na mesma porta
+    int reuse = 1;
+    if (setsockopt(notification_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
+        perror("Failed to set SO_REUSEADDR");
+    }
+    
+    // Bind no socket de notificações
+    sockaddr_in notify_addr;
+    memset(&notify_addr, 0, sizeof(notify_addr));
+    notify_addr.sin_family = AF_INET;
+    notify_addr.sin_addr.s_addr = INADDR_ANY;
+    notify_addr.sin_port = htons(40010);  // Porta fixa global para notificações
+    
+    if (bind(notification_sockfd, (struct sockaddr*)&notify_addr, sizeof(notify_addr)) < 0) {
+        perror("Failed to bind notification socket");
+        close(sockfd);
+        close(notification_sockfd);
+        throw std::runtime_error("Failed to bind notification socket");
+    }
+    
+    // Verificar porta que realmente foi atribuída
+    socklen_t addr_len = sizeof(notify_addr);
+    if (getsockname(notification_sockfd, (struct sockaddr*)&notify_addr, &addr_len) == 0) {
+        std::cout << "[CLIENT] Socket de notificação BOUND em " 
+                  << ipToString(notify_addr.sin_addr.s_addr) << ":" 
+                  << ntohs(notify_addr.sin_port) << std::endl;
+    }
+    
+    // Iniciar thread de escuta
+    notification_listener = std::thread(&ClientProcessor::listenForNotifications, this);
+    
     D_PRINT("processor initialized for server:port " << server_ip << ":" << server_port);
+}
+
+ClientProcessor::~ClientProcessor() {
+    running = false;
+    if (notification_listener.joinable()) {
+        notification_listener.join();
+    }
+    if (sockfd >= 0) close(sockfd);
+    if (notification_sockfd >= 0) close(notification_sockfd);
 }
 
 void ClientProcessor::request(const std::string& ip, int value) {
@@ -123,5 +176,58 @@ response_data_t ClientProcessor::getResponse() {
     response_queue.pop();
 
     return response;
+}
+
+void ClientProcessor::listenForNotifications() {
+    char buffer[PACKET_SIZE];
+    sockaddr_in sender_addr;
+    socklen_t sender_len = sizeof(sender_addr);
+    
+    // Configurar timeout no socket
+    struct timeval tv;
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
+    setsockopt(notification_sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    
+    std::cout << "[CLIENT] Escutando notificações na porta 40010" << std::endl;
+    
+    while (running) {
+        ssize_t recv_len = recvfrom(notification_sockfd, buffer, sizeof(buffer), 0,
+                                   (struct sockaddr*)&sender_addr, &sender_len);
+        
+        // Ignorar timeouts (recv_len < 0)
+        if (recv_len > 0) {
+            std::cout << "[CLIENT] Recebido pacote de " << ipToString(sender_addr.sin_addr.s_addr) 
+                      << " (tamanho: " << recv_len << ")" << std::endl;
+        }
+        
+        if (recv_len == PACKET_SIZE) {
+            packet_t packet;
+            memcpy(&packet, buffer, sizeof(packet_t));
+            packet_net_to_host(&packet);
+            
+            if (static_cast<PacketType>(packet.type) == LEADER_CHANGE) {
+                handleLeaderChange(packet);
+            }
+        }
+    }
+}
+
+void ClientProcessor::handleLeaderChange(const packet_t& packet) {
+    std::string new_ip = ipToString(packet.payload.leader.new_leader_ip);
+    uint16_t new_port = packet.payload.leader.new_leader_port;
+    
+    std::cout << std::endl;
+    std::cout << "========================================" << std::endl;
+    std::cout << "MUDANÇA DE LÍDER DETECTADA!" << std::endl;
+    std::cout << "Novo servidor: " << new_ip << ":" << new_port << std::endl;
+    std::cout << "ID do líder: " << packet.payload.leader.new_leader_id << std::endl;
+    std::cout << "========================================" << std::endl;
+    
+    // Atualizar servidor
+    server_ip = new_ip;
+    server_port = new_port;
+    
+    D_PRINT("Cliente reconectado ao novo líder");
 }
 
