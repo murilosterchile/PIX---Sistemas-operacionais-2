@@ -161,7 +161,9 @@ void ElectionService::sendHeartbeatLoop() {
         // Só envia se for primário
         if (server_data->config->status == PRIMARY) {
             sendHeartbeat();
-        }
+        }else{
+	    is_sending_heartbeat = false;
+	}
     }
 }
 
