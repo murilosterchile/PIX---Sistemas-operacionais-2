@@ -32,9 +32,12 @@ struct ServerData {
     std::condition_variable_any data_updated;
     bool has_update;
     
+    // sincronização inicial
+    std::atomic<bool> is_synchronized;
+    
     ServerData(ServerConfig* cfg) 
         : config(cfg), num_transactions(0), total_transferred(0), 
-          total_balance(0), has_update(false) {}
+          total_balance(0), has_update(false), is_synchronized(false) {}
 };
 
 #endif

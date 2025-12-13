@@ -55,7 +55,11 @@ enum PacketType : uint16_t {
     HEARTBEAT_ACK  = 10, // Resposta ao heartbeat
 
     //Sinc
-    SYNC_REQ       = 11  // Requisição de sincronização
+    SYNC_REQ       = 11,  // Requisição de sincronização
+    
+    // Replicação de clientes individuais
+    CLIENT_DATA    = 12,  // Envio de dados de cliente individual
+    LEADER_CHANGE  = 13   // Notificação de mudança de líder
 };
 
 // ============================================================================
@@ -105,6 +109,25 @@ struct simple_message {
 } __attribute__((packed));
 
 /**
+ * @brief Estrutura para replicação de dados de cliente individual
+ */
+struct client_data {
+    uint32_t client_addr;    /**< Endereço IP do cliente (network order) */
+    uint32_t balance;        /**< Saldo atual */
+    uint32_t last_req;       /**< Último ID de requisição processado */
+} __attribute__((packed));
+
+/**
+ * @brief Estrutura para notificação de mudança de líder
+ */
+struct leader_change {
+    uint32_t new_leader_id;  /**< ID do novo líder */
+    uint32_t new_leader_ip;  /**< IP do novo líder (network order) */
+    uint16_t new_leader_port;/**< Porta do novo líder */
+    uint8_t  padding[2];     /**< Padding para alinhamento */
+} __attribute__((packed));
+
+/**
  * @brief Estrutura de update de estado
  */
 struct state_update {
@@ -133,6 +156,8 @@ typedef struct packet {
         struct descoberta_ack disc_ack; /**< Dados de confirmação de descoberta */
         struct state_update state;      /**< Dados de replicação de estado */
         struct simple_message simple;   /**< Mensagens simples */
+        struct client_data cli_data;    /**< Dados de cliente individual */
+        struct leader_change leader;    /**< Mudança de líder */
     } payload;
     
 } __attribute__((packed)) packet_t;
@@ -204,7 +229,19 @@ inline void packet_net_to_host(packet_t* packet) {
                 // sem payload específico
                 break;
             case SYNC_REQ:
-            // sem payload específico
+                // sem payload específico
+                break;
+            
+            case CLIENT_DATA:
+                packet->payload.cli_data.client_addr = ntohl(packet->payload.cli_data.client_addr);
+                packet->payload.cli_data.balance = ntohl(packet->payload.cli_data.balance);
+                packet->payload.cli_data.last_req = ntohl(packet->payload.cli_data.last_req);
+                break;
+            
+            case LEADER_CHANGE:
+                packet->payload.leader.new_leader_id = ntohl(packet->payload.leader.new_leader_id);
+                packet->payload.leader.new_leader_ip = ntohl(packet->payload.leader.new_leader_ip);
+                packet->payload.leader.new_leader_port = ntohs(packet->payload.leader.new_leader_port);
                 break;
                 
             default:
@@ -258,8 +295,20 @@ inline void packet_host_to_net(packet_t* packet) {
             case HEARTBEAT_ACK:
                 // sem payload específico
                 break;
-            case SYNC_REQ:  // <--- ADICIONE AQUI
+            case SYNC_REQ:
                 // sem payload específico
+                break;
+            
+            case CLIENT_DATA:
+                packet->payload.cli_data.client_addr = htonl(packet->payload.cli_data.client_addr);
+                packet->payload.cli_data.balance = htonl(packet->payload.cli_data.balance);
+                packet->payload.cli_data.last_req = htonl(packet->payload.cli_data.last_req);
+                break;
+            
+            case LEADER_CHANGE:
+                packet->payload.leader.new_leader_id = htonl(packet->payload.leader.new_leader_id);
+                packet->payload.leader.new_leader_ip = htonl(packet->payload.leader.new_leader_ip);
+                packet->payload.leader.new_leader_port = htons(packet->payload.leader.new_leader_port);
                 break;
         }
         

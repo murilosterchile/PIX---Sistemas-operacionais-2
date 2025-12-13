@@ -119,21 +119,40 @@ int main(int argc, char* argv[]) {
         
         // --- LÓGICA DE STARTUP SEGURO ---
         
-        // 1. Tenta pegar os dados mais recentes de quem estiver vivo
-        // (Isso envia um SYNC_REQ para os peers)
-        replication_service->requestSync();
+        // 1. Se não tem peers, já está sincronizado
+        if (server_config->peers.empty()) {
+            std::cout << "[STARTUP] Sem peers - marcando como sincronizado" << std::endl;
+            server_data->is_synchronized = true;
+        } else {
+            // 2. Tem peers - solicita sincronização
+            replication_service->requestSync();
+            
+            std::cout << "[STARTUP] Aguardando sincronização de dados..." << std::endl;
+            
+            // 3. Aguarda até 3 segundos para sincronizar
+            auto start = std::chrono::steady_clock::now();
+            while (!server_data->is_synchronized) {
+                auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - start).count();
+                
+                if (elapsed > 3000) {
+                    std::cout << "[STARTUP] Timeout na sincronização - continuando mesmo assim" << std::endl;
+                    server_data->is_synchronized = true;
+                    break;
+                }
+                
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+        }
         
-        // 2. Dá um tempo para os dados chegarem (1.5 segundos)
-        std::cout << "Aguardando sincronização de dados..." << std::endl;
-        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+        std::cout << "[STARTUP] Sincronização completa!" << std::endl;
         
-        // 3. Agora que (provavelmente) estamos sincronizados, verificamos a liderança
+        // 4. Agora que estamos sincronizados, verificamos a liderança
         if (server_config->hasHighestId()) {
-            std::cout << "Sou o servidor com maior ID. Iniciando eleição para assumir..." << std::endl;
-            // Se eu tenho o maior ID, inicio uma eleição para me tornar o líder oficial
+            std::cout << "[STARTUP] Sou o servidor com maior ID. Iniciando eleição para assumir..." << std::endl;
             election_service->startElection();
         } else {
-            std::cout << "Não sou o maior ID. Permanecendo como Backup." << std::endl;
+            std::cout << "[STARTUP] Não sou o maior ID. Permanecendo como Backup." << std::endl;
         }
         
         // Loop principal

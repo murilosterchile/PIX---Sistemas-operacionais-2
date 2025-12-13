@@ -103,23 +103,31 @@ void ProcessingService::handleRequestThread(packet_t packet, sockaddr_in client_
         return;
     }
 
-    // executa transferência (permite enviar 0 e enviar para si mesmo)
+    // executa transferência, permite enviar 0 e enviar para si mesmo
     client.balance -= packet.payload.req.value;
     dest_client.balance += packet.payload.req.value;
     client.last_req = packet.seqn;
     server_data->num_transactions++;
     server_data->total_transferred += packet.payload.req.value;
-    // propaga o estado para backups, somente se for o primario
-    if (replication_service && server_data->config->status == PRIMARY) {
-        replication_service->propagateState();
-    }
 
     displayTransaction(packet, client_ip, false);
 
     server_data->has_update = true;
+    
+    // Guardar novo saldo antes de liberar o lock
+    uint32_t new_balance = client.balance;
+    
+    // Liberar o lock antes de replicar para evitar deadlock
+    write_lock.unlock();
+    
     server_data->data_updated.notify_all();
 
-    sendAck(client_addr, packet.seqn, client.balance, true);
+    sendAck(client_addr, packet.seqn, new_balance, true);
+    
+    // Agora propaga sem lock travado, para evitar deadlock
+    if (replication_service && server_data->config->status == PRIMARY) {
+        replication_service->propagateState();
+    }
 }
 
 void ProcessingService::sendAck(const sockaddr_in& addr, uint32_t seqn, uint32_t balance, bool success) {

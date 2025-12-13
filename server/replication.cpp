@@ -57,12 +57,15 @@ void ReplicationService::propagateState() {
     
     std::cout << "[REPLICATION] Propagando estado para backups..." << std::endl;
     
-    // Enviar para cada backup
+    // Envia para cada backup
     for (const auto& peer : server_data->config->peers) {
         if (peer.is_alive) {
             sendStateToBackup(peer);
         }
     }
+    
+    // Agora propaga todos os clientes
+    propagateAllClients();
 }
 
 void ReplicationService::sendStateToBackup(const PeerInfo& peer) {
@@ -135,6 +138,11 @@ void ReplicationService::listenForUpdates() {
                     handleStateUpdate(packet);
                 }
             }
+            else if (type == CLIENT_DATA) {
+                if (server_data->config->status == BACKUP) {
+                    handleClientData(packet);
+                }
+            }
             else if (type == SYNC_REQ) {
                 handleSyncRequest(sender_addr);
             }
@@ -156,6 +164,12 @@ void ReplicationService::handleStateUpdate(const packet_t& packet) {
     std::cout << "[REPLICATION] Estado aplicado: tx=" << server_data->num_transactions
               << " total_transferred=" << server_data->total_transferred
               << " total_balance=" << server_data->total_balance << std::endl;
+    
+    // marca como sincronizado quando recebe primeiro STATE_UPDATE
+    if (!server_data->is_synchronized) {
+        server_data->is_synchronized = true;
+        std::cout << "[REPLICATION] Servidor sincronizado e pronto!" << std::endl;
+    }
     
     server_data->has_update = true;
     
@@ -188,8 +202,9 @@ void ReplicationService::handleSyncRequest(const sockaddr_in& sender) {
     }
 
     std::cout << "[REPLICATION] Recebido pedido de SYNC de " 
-              << ipToString(sender.sin_addr.s_addr) << ". Enviando estado..." << std::endl;
+              << ipToString(sender.sin_addr.s_addr) << ". Enviando estado completo..." << std::endl;
 
+    // 1. Envia dados agregados
     packet_t update_packet;
     init_packet(&update_packet, STATE_UPDATE, 0);
     
@@ -199,10 +214,112 @@ void ReplicationService::handleSyncRequest(const sockaddr_in& sender) {
         update_packet.payload.state.total_transferred = server_data->total_transferred;
         update_packet.payload.state.total_balance = server_data->total_balance;
         update_packet.payload.state.num_clients = server_data->clients.size();
+        
+        packet_host_to_net(&update_packet);
+        
+        sendto(socket_fd, &update_packet, sizeof(update_packet), 0,
+               (struct sockaddr*)&sender, sizeof(sender));
+        
+        // 2. Envia cada cliente individualmente
+        std::cout << "[REPLICATION] Enviando " << server_data->clients.size() 
+                  << " clientes..." << std::endl;
+        
+        for (const auto& client_pair : server_data->clients) {
+            packet_t client_packet;
+            init_packet(&client_packet, CLIENT_DATA, 0);
+            
+            client_packet.payload.cli_data.client_addr = client_pair.first;
+            client_packet.payload.cli_data.balance = client_pair.second.balance;
+            client_packet.payload.cli_data.last_req = client_pair.second.last_req;
+            
+            packet_host_to_net(&client_packet);
+            
+            sendto(socket_fd, &client_packet, sizeof(client_packet), 0,
+                   (struct sockaddr*)&sender, sizeof(sender));
+            
+            // Pequeno delay para não sobrecarregar a rede
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
     }
     
-    packet_host_to_net(&update_packet);
+    std::cout << "[REPLICATION] Sincronização completa enviada para " 
+              << ipToString(sender.sin_addr.s_addr) << std::endl;
+}
+
+void ReplicationService::propagateClientData(uint32_t client_ip, const ClientInfo& client) {
+    if (server_data->config->status != PRIMARY) {
+        return;
+    }
     
-    sendto(socket_fd, &update_packet, sizeof(update_packet), 0,
-           (struct sockaddr*)&sender, sizeof(sender));
+    for (const auto& peer : server_data->config->peers) {
+        if (peer.is_alive) {
+            sendClientToBackup(peer, client_ip, client);
+        }
+    }
+}
+
+void ReplicationService::propagateAllClients() {
+    if (server_data->config->status != PRIMARY) {
+        return;
+    }
+    
+    std::shared_lock<std::shared_mutex> lock(server_data->rw_mutex);
+    
+    std::cout << "[REPLICATION] Propagando " << server_data->clients.size() 
+              << " clientes para backups..." << std::endl;
+    
+    for (const auto& client_pair : server_data->clients) {
+        uint32_t client_ip = client_pair.first;
+        const ClientInfo& client = client_pair.second;
+        
+        for (const auto& peer : server_data->config->peers) {
+            if (peer.is_alive) {
+                sendClientToBackup(peer, client_ip, client);
+            }
+        }
+    }
+}
+
+void ReplicationService::sendClientToBackup(const PeerInfo& peer, uint32_t client_ip, const ClientInfo& client) {
+    packet_t client_packet;
+    init_packet(&client_packet, CLIENT_DATA, 0);
+    
+    client_packet.payload.cli_data.client_addr = client_ip;
+    client_packet.payload.cli_data.balance = client.balance;
+    client_packet.payload.cli_data.last_req = client.last_req;
+    
+    packet_host_to_net(&client_packet);
+    
+    sockaddr_in peer_addr;
+    memset(&peer_addr, 0, sizeof(peer_addr));
+    peer_addr.sin_family = AF_INET;
+    inet_aton(peer.ip.c_str(), &peer_addr.sin_addr);
+    peer_addr.sin_port = htons(peer.repl_port);
+    
+    sendto(socket_fd, &client_packet, sizeof(client_packet), 0,
+           (struct sockaddr*)&peer_addr, sizeof(peer_addr));
+}
+
+void ReplicationService::handleClientData(const packet_t& packet) {
+    if (server_data->config->status != BACKUP) {
+        return;
+    }
+    
+    std::unique_lock<std::shared_mutex> lock(server_data->rw_mutex);
+    
+    uint32_t client_ip = packet.payload.cli_data.client_addr;
+    
+    // Atualiza ou cria cliente
+    auto it = server_data->clients.find(client_ip);
+    if (it == server_data->clients.end()) {
+        // Novo cliente
+        server_data->clients[client_ip] = ClientInfo(client_ip);
+    }
+    
+    server_data->clients[client_ip].balance = packet.payload.cli_data.balance;
+    server_data->clients[client_ip].last_req = packet.payload.cli_data.last_req;
+    
+    std::cout << "[REPLICATION] Cliente " << ipToString(client_ip) 
+              << " atualizado: balance=" << packet.payload.cli_data.balance
+              << " last_req=" << packet.payload.cli_data.last_req << std::endl;
 }
