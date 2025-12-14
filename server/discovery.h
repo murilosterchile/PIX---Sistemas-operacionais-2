@@ -27,6 +27,9 @@ private:
     void listenForDiscovery();
     void handleDiscoveryRequest(const sockaddr_in& client_addr);
     void sendDiscoveryResponse(const sockaddr_in& client_addr);
+    void sendServerBroadcast();
+    void handleServerDiscoveryRequest(const sockaddr_in& client_addr, uint16_t peer_port, uint16_t peer_id);
+    void sendServerDiscoveryResponse(const sockaddr_in& client_addr);
 };
 
 #endif

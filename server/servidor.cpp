@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <iostream>
 #include <memory>
 #include <csignal>
@@ -40,6 +41,7 @@ void signalHandler(int) {
     
     exit(0);
 }
+
 
 int main(int argc, char* argv[]) {
     if (argc < 3) {
@@ -87,6 +89,7 @@ int main(int argc, char* argv[]) {
     // Inicie sempre como BACKUP para proteger os dados.
     server_config->status = BACKUP;
     std::cout << "[CONFIG] Iniciando como BACKUP para sincronização..." << std::endl;
+
     
     // configurando handler de sinal
     signal(SIGINT, signalHandler);
@@ -170,3 +173,4 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
+

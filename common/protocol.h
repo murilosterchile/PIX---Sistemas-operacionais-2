@@ -59,7 +59,10 @@ enum PacketType : uint16_t {
     
     // Replicação de clientes individuais
     CLIENT_DATA    = 12,  // Envio de dados de cliente individual
-    LEADER_CHANGE  = 13   // Notificação de mudança de líder
+    LEADER_CHANGE  = 13,   // Notificação de mudança de líder
+
+    DESCOBERTA_SERVIDOR  = 14,
+    DESCOBERTA_SERVIDOR_ACK  = 15
 };
 
 // ============================================================================
@@ -128,6 +131,15 @@ struct leader_change {
 } __attribute__((packed));
 
 /**
+ * @brief Estrutura para notificação de mudança de líder
+ */
+struct new_server {
+    uint32_t new_server_id;  /**< ID do novo líder */
+    uint16_t new_server_port;/**< Porta do novo líder */
+    uint8_t  padding[2];     /**< Padding para alinhamento */
+} __attribute__((packed));
+
+/**
  * @brief Estrutura de update de estado
  */
 struct state_update {
@@ -158,6 +170,7 @@ typedef struct packet {
         struct simple_message simple;   /**< Mensagens simples */
         struct client_data cli_data;    /**< Dados de cliente individual */
         struct leader_change leader;    /**< Mudança de líder */
+        struct new_server server;    
     } payload;
     
 } __attribute__((packed)) packet_t;
