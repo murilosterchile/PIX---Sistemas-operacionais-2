@@ -51,28 +51,31 @@ void DiscoveryService::listenForDiscovery() {
     std::cout << "Aguardando mensagens de descoberta..." << std::endl;
     
     while (running) {
-        ssize_t recv_len = recvfrom(socket_fd, buffer, sizeof(buffer), 0,
-                                   (struct sockaddr*)&client_addr, &client_len);
-        
-        if (recv_len > 0) {
-            std::cout << "Recebida mensagem de " << ipToString(client_addr.sin_addr.s_addr) 
-                      << " (tamanho: " << recv_len << ")" << std::endl;
-                      
-            if (recv_len == PACKET_SIZE) {
-                packet_t packet;
-                memcpy(&packet, buffer, sizeof(packet_t));
-                packet_net_to_host(&packet);
-                
-                std::cout << "Tipo de pacote: " << packet.type << std::endl;
-                
-                if (static_cast<PacketType>(packet.type) == DESCOBERTA) {
-                    std::cout << "Processando descoberta de " << ipToString(client_addr.sin_addr.s_addr) << std::endl;
-                    handleDiscoveryRequest(client_addr);
+	ssize_t recv_len = recvfrom(socket_fd, buffer, sizeof(buffer), 0,
+                        (struct sockaddr*)&client_addr, &client_len);
+            
+	if(server_data->config->status == PRIMARY)
+	{
+            if (recv_len > 0) {
+                std::cout << "Recebida mensagem de " << ipToString(client_addr.sin_addr.s_addr) 
+                          << " (tamanho: " << recv_len << ")" << std::endl;
+                          
+                if (recv_len == PACKET_SIZE) {
+                    packet_t packet;
+                    memcpy(&packet, buffer, sizeof(packet_t));
+                    packet_net_to_host(&packet);
+                    
+                    std::cout << "Tipo de pacote: " << packet.type << std::endl;
+                    
+                    if (static_cast<PacketType>(packet.type) == DESCOBERTA) {
+                        std::cout << "Processando descoberta de " << ipToString(client_addr.sin_addr.s_addr) << std::endl;
+                        handleDiscoveryRequest(client_addr);
+                    }
+                } else {
+                    std::cout << "Pacote com tamanho incorreto: " << recv_len << " (esperado: " << PACKET_SIZE << ")" << std::endl;
                 }
-            } else {
-                std::cout << "Pacote com tamanho incorreto: " << recv_len << " (esperado: " << PACKET_SIZE << ")" << std::endl;
             }
-        }
+	}
     }
 }
 

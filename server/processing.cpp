@@ -50,7 +50,7 @@ void ProcessingService::listenForRequests() {
             packet_t packet;
             memcpy(&packet, buffer, sizeof(packet_t));
             packet_net_to_host(&packet);
-            if (static_cast<PacketType>(packet.type) == REQUISICAO) {
+            if (static_cast<PacketType>(packet.type) == REQUISICAO && server_data->config->status == PRIMARY) {
                 std::thread request_thread(&ProcessingService::handleRequestThread, this, packet, client_addr);
                 request_thread.detach();
             }
