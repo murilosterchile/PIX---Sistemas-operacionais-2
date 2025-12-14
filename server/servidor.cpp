@@ -19,86 +19,43 @@ ServerData* server_data = nullptr;
 std::unique_ptr<ReplicationService> replication_service;
 std::unique_ptr<ElectionService> election_service;
 
+// SIGNAL HANDLER ORIGINAL (CAUSA DEADLOCK SE USAR JOIN INTERNO)
 void signalHandler(int) {
     std::cout << "\nEncerrando servidor..." << std::endl;
-    
-    if (interface_service) {
-        interface_service->stop();
-    }
-    if (processing_service) {
-        processing_service->stop();
-    }
-    if (discovery_service) {
-        discovery_service->stop();
-    }
-    if (replication_service) {
-        replication_service->stop();
-    }
-    if (election_service) {
-        election_service->stop();
-    }
-    
+    if (interface_service) interface_service->stop();
+    if (processing_service) processing_service->stop();
+    if (discovery_service) discovery_service->stop();
+    if (replication_service) replication_service->stop();
+    if (election_service) election_service->stop();
     exit(0);
 }
 
 int main(int argc, char* argv[]) {
+    // Nova assinatura simplificada
     if (argc < 3) {
-        std::cerr << "Uso: " << argv[0] << " <porta> <server_id> [peer_id:peer_ip:peer_port ...]" << std::endl;
+        std::cerr << "Uso: " << argv[0] << " <porta> <server_id>" << std::endl;
         return 1;
     }
 
     uint16_t port = static_cast<uint16_t>(std::atoi(argv[1]));
-    if (!isValidPort(port)) {
-        std::cerr << "Porta inválida: " << port << std::endl;
-        return 1;
-    }
+    if (!isValidPort(port)) return 1;
     
     uint32_t server_id = static_cast<uint32_t>(std::atoi(argv[2]));
-    if (server_id == 0) {
-        std::cerr << "ID do servidor inválido, deve ser > 0" << std::endl;
-        return 1;
-    }
+    if (server_id == 0) return 1;
     
-    // cria a configuração
     server_config = new ServerConfig(server_id, port);
     server_data = new ServerData(server_config);
     
     std::cout << "Servidor ID: " << server_id << " na porta " << port << std::endl;
-
-    // configuramos os peers a partir dos argumentos
-    for (int i = 3; i < argc; i++) {
-        std::string peer_str(argv[i]);
-        size_t first_colon = peer_str.find(':');
-        size_t second_colon = peer_str.find(':', first_colon + 1);
-        
-        if (first_colon != std::string::npos && second_colon != std::string::npos) {
-            uint32_t peer_id = std::stoul(peer_str.substr(0, first_colon));
-            std::string peer_ip = peer_str.substr(first_colon + 1, second_colon - first_colon - 1);
-            uint16_t peer_port = std::stoul(peer_str.substr(second_colon + 1));
-            
-            server_config->peers.emplace_back(peer_id, peer_ip, peer_port, peer_port + 100);
-            std::cout << "[CONFIG] Peer adicionado: ID=" << peer_id 
-                      << " IP=" << peer_ip << " Porta=" << peer_port << std::endl;
-        }
-    }
     
-    // --- LÓGICA DE STATUS INICIAL (MODIFICADA) ---
-    // NUNCA inicie como PRIMARY automaticamente. 
-    // Inicie sempre como BACKUP para proteger os dados.
     server_config->status = BACKUP;
-    std::cout << "[CONFIG] Iniciando como BACKUP para sincronização..." << std::endl;
+    std::cout << "[CONFIG] Iniciando como BACKUP..." << std::endl;
     
-    // configurando handler de sinal
     signal(SIGINT, signalHandler);
     signal(SIGTERM, signalHandler);
     
     try {
-        // Status inicial
-        std::cout << getCurrentTimestamp()
-                  << " num_transactions 0 total_transferred 0 total_balance 0"
-                  << std::endl;
-        
-        // inicia serviços
+        // Inicia serviços
         discovery_service = std::make_unique<DiscoveryService>(port, server_data);
         discovery_service->start();
         
@@ -114,48 +71,47 @@ int main(int argc, char* argv[]) {
         election_service = std::make_unique<ElectionService>(port, server_data);
         election_service->start();
         
-        std::cout << "Servidor iniciado na porta " << port << std::endl;
-        std::cout << "Pressione Ctrl+C para encerrar" << std::endl;
+        // --- AUTODESCOBERTA ATIVA ---
+        discovery_service->discoverPeers();
         
-        // --- LÓGICA DE STARTUP SEGURO ---
+        std::cout << "[STARTUP] Aguardando descoberta de peers..." << std::endl;
+        std::this_thread::sleep_for(std::chrono::seconds(2));
         
-        // 1. Se não tem peers, já está sincronizado
-        if (server_config->peers.empty()) {
-            std::cout << "[STARTUP] Sem peers - marcando como sincronizado" << std::endl;
-            server_data->is_synchronized = true;
-        } else {
-            // 2. Tem peers - solicita sincronização
-            replication_service->requestSync();
-            
-            std::cout << "[STARTUP] Aguardando sincronização de dados..." << std::endl;
-            
-            // 3. Aguarda até 3 segundos para sincronizar
+        // Lógica de Sincronização
+        {
+            std::shared_lock<std::shared_mutex> lock(server_data->rw_mutex);
+            if (server_config->peers.empty()) {
+                std::cout << "[STARTUP] Sem peers - assumindo isolado." << std::endl;
+                server_data->is_synchronized = true;
+            } else {
+                std::cout << "[STARTUP] Peers encontrados: " << server_config->peers.size() << std::endl;
+                replication_service->requestSync();
+            }
+        }
+        
+        // Aguarda sync se necessário
+        if (!server_data->is_synchronized) {
+            std::cout << "[STARTUP] Aguardando sync..." << std::endl;
             auto start = std::chrono::steady_clock::now();
             while (!server_data->is_synchronized) {
-                auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::steady_clock::now() - start).count();
-                
+                auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
                 if (elapsed > 3000) {
-                    std::cout << "[STARTUP] Timeout na sincronização - continuando mesmo assim" << std::endl;
                     server_data->is_synchronized = true;
                     break;
                 }
-                
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
         }
         
-        std::cout << "[STARTUP] Sincronização completa!" << std::endl;
-        
-        // 4. Agora que estamos sincronizados, verificamos a liderança
-        if (server_config->hasHighestId()) {
-            std::cout << "[STARTUP] Sou o servidor com maior ID. Iniciando eleição para assumir..." << std::endl;
-            election_service->startElection();
-        } else {
-            std::cout << "[STARTUP] Não sou o maior ID. Permanecendo como Backup." << std::endl;
+        // Eleição
+        {
+            std::shared_lock<std::shared_mutex> lock(server_data->rw_mutex);
+            if (server_config->hasHighestId()) {
+                std::cout << "[STARTUP] Maior ID. Iniciando eleição..." << std::endl;
+                election_service->startElection();
+            }
         }
         
-        // Loop principal
         while (true) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
         }
@@ -165,8 +121,5 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     
-    delete server_data;
-    delete server_config;
-
     return 0;
 }

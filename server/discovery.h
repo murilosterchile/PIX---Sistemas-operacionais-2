@@ -23,10 +23,17 @@ public:
     void start();
     void stop();
     
+    // Método para autodescoberta
+    void discoverPeers();
+    
 private:
     void listenForDiscovery();
     void handleDiscoveryRequest(const sockaddr_in& client_addr);
     void sendDiscoveryResponse(const sockaddr_in& client_addr);
+    
+    // Novos handlers
+    void handleServerMessage(const packet_t& packet, const sockaddr_in& sender_addr);
+    void addPeerIfNew(uint32_t id, const std::string& ip, uint16_t port, uint16_t repl_port);
 };
 
 #endif
