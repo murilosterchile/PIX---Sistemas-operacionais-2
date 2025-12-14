@@ -99,6 +99,8 @@ void DiscoveryService::handleDiscoveryRequest(const sockaddr_in& client_addr) {
         
         // Marcar que houve atualização
         server_data->has_update = true;
+    }else{
+        server_data->clients[client_ip].last_req = 0;
     }
     
     lock.unlock();
